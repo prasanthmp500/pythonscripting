@@ -1,5 +1,7 @@
 import sys
 import time
+
+
 from datetime import datetime
 from cassandra.cluster import Cluster
 from cassandra.cluster import Session
@@ -18,13 +20,13 @@ profile = ExecutionProfile(
 )
 
 
+
 def initializeCassandraSession():
     cassandra_ip_address = input("Enter Cassandra Cluster IP Address \n(example 192.168.123.219):\n")
     ip_list = [cassandra_ip_address]
     cassandra_keyspace = input("Enter Cassandra Keyspace \n(example Openmind , Openmind_BE etc):\n")
-    cassandra_ip_address = '192.168.123.219'
     cluster = Cluster(ip_list)
-    print(f"Connecting to cassandra : {cassandra_ip_address} keyspace: {cassandra_keyspace}.\n")
+    print(f"Connecting to cassandra : {ip_list} keyspace: {cassandra_keyspace}.\n")
     session = cluster.connect(cassandra_keyspace)
     print("Successfully connected to Cassandra.\n")
     return session
@@ -78,6 +80,7 @@ def findJobsForCleanUp(session, primecast_account_id, date_before_to_cleanup):
 
 
 def getIdFromPrimecastAccountNameIdMap(primecast_account_name_id_map):
+    primecast_account_id = None
     for i in primecast_account_name_id_map:
         primecast_account_id = primecast_account_name_id_map[i]
         break
@@ -92,10 +95,10 @@ def confirm_deletion_of_jobs():
         elif check[0] == 'n':
             return False
         else:
-            print('Invalid Input')
+            print('Invalid Input.')
             return confirm_deletion_of_jobs()
     except Exception as error:
-        print("Please enter valid inputs")
+        print("Please enter valid inputs.")
         print(error)
         return confirm_deletion_of_jobs()
 
@@ -106,18 +109,19 @@ def deleteTemplates(session, template_ids):
 
 
 def deleteJobTemplates(session, job_dict):
-    print(f"Deleting templates for job: {job_dict['name']}")
+    print(f"Searching Templates for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     template_ids = []
     template_rows = session.execute(f"SELECT id FROM mep_template WHERE job = {job_id} ALLOW FILTERING")
     for template_row in template_rows:
         template_ids.append(template_row.id)
     if len(template_ids) > 0:
-        print(f"Found {len(template_ids)} template(s)")
+        print(f"Found {len(template_ids)} Template(s) to delete.")
         deleteTemplates(session, template_ids)
+        print(f"Successfully deleted the Template(s).")
         # time.sleep(1)
     else:
-        print(f"Found {len(template_ids)}  templates to delete")
+        print(f"Found {len(template_ids)} Template(s) to delete.")
 
 
 def deleteNotifications(session, job_notification_ids):
@@ -126,7 +130,7 @@ def deleteNotifications(session, job_notification_ids):
 
 
 def deleteJobNotifications(session, job_dict):
-    print(f"Deleting notifications for job: {job_dict['name']}")
+    print(f"Searching notifications for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     job_notification_ids = []
     notification_rows = session.execute(f"SELECT id FROM mep_notification WHERE flight = {job_id} ALLOW FILTERING")
@@ -134,17 +138,18 @@ def deleteJobNotifications(session, job_dict):
         job_notification_ids.append(notification_row.id)
 
     if len(job_notification_ids) > 0:
-        print(f"Found {len(job_notification_ids)} Notifications(s)")
+        print(f"Found {len(job_notification_ids)} Notifications(s) to delete.")
         deleteNotifications(session, job_notification_ids)
+        print(f"Successfully deleted the Notifications.")
         # time.sleep(1)
     else:
-        print(f"Found {len(job_notification_ids)}  Notifications to delete")
+        print(f"Found {len(job_notification_ids)} Notifications to delete.")
 
 
 def findJobById(session, job_id):
-    row = session.execute(f"SELECT id, name, parameterisedcontactlist, location, profile FROM mep_job WHERE id = {job_id}").one()
+    row = session.execute(f"SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = {job_id}").one()
     job_dict = {"id": row.id, "name": row.name, "parameterisedcontactlist": row.parameterisedcontactlist,
-                "location": row.location, "profile": row.profile}
+                "location": row.location, "profile": row.profile, "timeframe": row.timeframe}
     return job_dict
 
 
@@ -180,7 +185,7 @@ def deleteJobParameterisedList(session, job_dict):
 
 
 def deleteFlightStatusHistory(session, job_dict):
-    print(f"Deleting flightstatushistory for job: {job_dict['name']}")
+    print(f"Searching flight status histories for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     flightstatushistory_ids = []
     flightstatushistory_rows = session.execute(f"SELECT id FROM flightstatushistory WHERE flight = {job_id} ALLOW FILTERING")
@@ -188,11 +193,11 @@ def deleteFlightStatusHistory(session, job_dict):
         flightstatushistory_ids.append(flightstatushistory_row.id)
 
     if len(flightstatushistory_ids) > 0:
-        print(f"Found {len(flightstatushistory_ids)} flightstatushistory(s) to delete")
+        print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
         for flightstatushistory_id in flightstatushistory_ids:
             session.execute(f"DELETE FROM flightstatushistory WHERE id = {flightstatushistory_id}")
     else:
-        print(f"Found {len(flightstatushistory_ids)}  flight status history to delete")
+        print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
 
 
 def deleteJob(session, job_dict):
@@ -200,18 +205,55 @@ def deleteJob(session, job_dict):
     print(f"Deleting job name={job_dict['name']} id={job_dict['id']}")
     session.execute(f"DELETE FROM mep_job WHERE id = {job_id}")
 
+def findJobTimeframeById(session, job_dict):
+    timeframe_id = job_dict["timeframe"]
+    timeframe_row = session.execute(f"SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = {timeframe_id}").one()
+    timeframe_dict = {"id": timeframe_row.id, "job": timeframe_row.job, "monday": timeframe_row.monday, "tuesday": timeframe_row.tuesday
+                      , "wednesday": timeframe_row.wednesday, "thursday": timeframe_row.thursday, "friday": timeframe_row.friday,
+                      "saturday": timeframe_row.saturday, "sunday": timeframe_row.sunday}
+    return timeframe_dict
+
+
+def deleteTimeFrameDays(session, timeframe_day_ids):
+    for timeframe_day_id in timeframe_day_ids:
+        print(f"Deleting timeframe day => id={timeframe_day_id}")
+        session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
+
+
+def deleteTimeFrame(session, timeframe_day_ids):
+    for timeframe_day_id in timeframe_day_ids:
+        print(f"Deleting timeframe day => id={timeframe_day_id}")
+        session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
+
+
+def deleteTimeFrameById(session, timeframe_id):
+    session.execute(f"DELETE FROM mep_timeframe WHERE id = {timeframe_id}")
+
+
+def deleteJobTimeFrame(session, job_dict):
+    timeframe_id = job_dict["timeframe"]
+    if timeframe_id is None:
+        print(f"Found no time frame for job: {job_dict['name']}")
+    else:
+        timeframe_dict = findJobTimeframeById(session, job_dict)
+        timeframe_day_ids = [timeframe_dict["monday"], timeframe_dict["tuesday"], timeframe_dict["wednesday"],
+                             timeframe_dict["thursday"], timeframe_dict["saturday"], timeframe_dict["sunday"]]
+        deleteTimeFrameDays(session, timeframe_day_ids)
+        deleteTimeFrameById(session, timeframe_id)
+
 
 def scheduleJobsForDelete(session, job_ids_to_delete):
     confirmation = confirm_deletion_of_jobs()
     if confirmation:
         for job_id in job_ids_to_delete:
             job_dict = findJobById(session, job_id)
-            print(f"Executing cleanup for job: {job_dict}")
+            print(f"Executing cleanup for job: {job_dict}.")
             print("--------------------------------------")
             deleteJobTemplates(session, job_dict)
             deleteJobNotifications(session, job_dict)
             deleteJobParameterisedList(session, job_dict)
             deleteFlightStatusHistory(session, job_dict)
+            deleteJobTimeFrame(session, job_dict)
             deleteJob(session, job_dict)
             time.sleep(2)
             print("--------------------------------------")
@@ -223,7 +265,11 @@ def cleanUpJobs():
     date_before_to_cleanup = userInputDate()
     primecast_account_id = getIdFromPrimecastAccountNameIdMap(primecast_account_name_id_map)
     job_ids_to_delete = findJobsForCleanUp(session, primecast_account_id, date_before_to_cleanup)
-    scheduleJobsForDelete(session, job_ids_to_delete)
+
+    if len(job_ids_to_delete) > 0:
+        scheduleJobsForDelete(session, job_ids_to_delete)
+    else:
+        print("Found no jobs to delete")
 
 
 cleanUpJobs()
