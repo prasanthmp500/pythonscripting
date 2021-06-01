@@ -8,15 +8,14 @@ from cassandra.cluster import Session
 
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import WhiteListRoundRobinPolicy, DowngradingConsistencyRetryPolicy, ConsistencyLevel
-from cassandra.query import tuple_factory
+from cassandra.query import named_tuple_factory
 
 profile = ExecutionProfile(
-    load_balancing_policy=WhiteListRoundRobinPolicy(['127.0.0.1']),
     retry_policy=DowngradingConsistencyRetryPolicy(),
     consistency_level=ConsistencyLevel.LOCAL_QUORUM,
     serial_consistency_level=ConsistencyLevel.LOCAL_SERIAL,
     request_timeout=15,
-    row_factory=tuple_factory
+    row_factory=named_tuple_factory
 )
 
 session = None
@@ -82,7 +81,7 @@ def initializeCassandraSession():
     cassandra_ip_address = input("Enter Cassandra Cluster IP Address (example 192.168.123.219):\n")
     ip_list = [cassandra_ip_address]
     cassandra_keyspace = input("Enter Cassandra Keyspace (example Openmind , Openmind_BE etc):\n")
-    cluster = Cluster(ip_list)
+    cluster = Cluster(ip_list, execution_profiles={EXEC_PROFILE_DEFAULT: profile})
     print(f"Connecting to cassandra : {ip_list} keyspace: {cassandra_keyspace}.")
     session = cluster.connect(cassandra_keyspace)
     print("Successfully connected to Cassandra.")
@@ -127,10 +126,6 @@ def userInputDate():
 
 
 def findJobsForCleanUp(primecast_account_id, date_before_to_cleanup):
-    #job_rows = session.execute(
-    #    f"SELECT id,name FROM mep_job WHERE enddate < '{date_before_to_cleanup}' AND  account = {primecast_account_id} \
-    #     ALLOW FILTERING")
-
     job_rows = session.execute(job_lookup_stmt_by_enddate_and_account, [datetime.strptime(date_before_to_cleanup, '%Y-%m-%d %H:%M:%S'), primecast_account_id])
     job_ids_to_delete = []
     for job_row in job_rows:
@@ -165,7 +160,6 @@ def confirm_deletion_of_jobs():
 
 def deleteTemplates(template_ids):
     for template_id in template_ids:
-        # session.execute(f"DELETE FROM mep_template WHERE id = {template_id}")
         session.execute(template_delete_by_id, [template_id])
 
 
@@ -173,7 +167,6 @@ def deleteJobTemplates(job_dict):
     print(f"Searching Templates for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     template_ids = []
-    # template_rows = session.execute(f"SELECT id FROM mep_template WHERE job = {job_id} ALLOW FILTERING")
     template_rows = session.execute(template_lookup_stmt_by_job, [job_id])
 
     for template_row in template_rows:
@@ -189,12 +182,10 @@ def deleteJobTemplates(job_dict):
 
 def deleteNotifications(job_notification_ids):
     for job_notification_id in job_notification_ids:
-        # session.execute(f"DELETE FROM mep_notification WHERE id = {job_notification_id}")
         session.execute(notification_delete_by_id, [job_notification_id])
 
 
 def deleteJobNotifications(job_dict):
-    print(f"Searching notifications for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     job_notification_ids = []
     # notification_rows = session.execute(f"SELECT id FROM mep_notification WHERE flight = {job_id} ALLOW FILTERING")
@@ -213,7 +204,6 @@ def deleteJobNotifications(job_dict):
 
 
 def findJobById(job_id):
-   # row = session.execute(f"SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = {job_id}").one()
     row = session.execute(job_lookup_stmt_by_id,[job_id]).one()
 
     job_dict = {"id": row.id, "name": row.name, "parameterisedcontactlist": row.parameterisedcontactlist,
@@ -222,17 +212,14 @@ def findJobById(job_id):
 
 
 def deleteParameterisedListJob(parameterised_list_id):
-    # session.execute(f"DELETE FROM mep_parameterisedlist_job WHERE parameterisedlist= {parameterised_list_id}")
     session.execute(parameterisedlistjob_delete_by_parameterisedlist, [parameterised_list_id])
 
 
 def deleteParameterisedList(parameterised_list_id):
-    # session.execute(f"DELETE FROM mep_parameterisedlist WHERE id = {parameterised_list_id}")
     session.execute(parameterisedlist_delete_by_id,[parameterised_list_id])
 
 def deleteParameterisedIntermediate(parameterised_list_id):
     paramaterised_list_item_ids = []
-    # parameterisedlist_msisdn_rows = session.execute(f"SELECT parameterisedlistitem FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
     parameterisedlist_msisdn_rows = session.execute(parameterisedlistmsisdn_lookup_by_parameterisedlist_id, [parameterised_list_id])
     for parameterisedlist_msisdn_row in parameterisedlist_msisdn_rows:
         paramaterised_list_item_ids.append(parameterisedlist_msisdn_row.parameterisedlistitem)
@@ -248,9 +235,9 @@ def deleteJobParameterisedList(job_dict):
     parameterised_list_id = job_dict["parameterisedcontactlist"]
     if bool(parameterised_list_id):
         print(f"Deleting parameterised list for job: {job_dict['name']}")
-        deleteParameterisedIntermediate(session, parameterised_list_id)
-        deleteParameterisedList(session, parameterised_list_id)
-        deleteParameterisedListJob(session, parameterised_list_id)
+        deleteParameterisedIntermediate( parameterised_list_id)
+        deleteParameterisedList( parameterised_list_id)
+        deleteParameterisedListJob( parameterised_list_id)
     else:
         print(f"Found no parameterised list for job: {job_dict['name']}")
 
@@ -259,7 +246,6 @@ def deleteFlightStatusHistory(job_dict):
     print(f"Searching flight status histories for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     flightstatushistory_ids = []
-    # flightstatushistory_rows = session.execute(f"SELECT id FROM flightstatushistory WHERE flight = {job_id} ALLOW FILTERING")
     flightstatushistory_rows = session.execute(flightstatushistory_lookup_by_job_id,[job_id])
 
     for flightstatushistory_row in flightstatushistory_rows:
@@ -268,7 +254,6 @@ def deleteFlightStatusHistory(job_dict):
     if len(flightstatushistory_ids) > 0:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
         for flightstatushistory_id in flightstatushistory_ids:
-            #session.execute(f"DELETE FROM flightstatushistory WHERE id = {flightstatushistory_id}")
             session.execute(flightstatushistory_lookup_by_id, [flightstatushistory_id])
     else:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
@@ -277,12 +262,11 @@ def deleteFlightStatusHistory(job_dict):
 def deleteJob(job_dict):
     job_id = job_dict["id"]
     print(f"Deleting job name={job_dict['name']} id={job_dict['id']}")
-    # session.execute(f"DELETE FROM mep_job WHERE id = {job_id}")
     session.execute(job_delete_by_id, [job_id])
+
 
 def findJobTimeframeById(job_dict):
     timeframe_id = job_dict["timeframe"]
-    # timeframe_row = session.execute(f"SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = {timeframe_id}").one()
     timeframe_row = session.execute(timeframe_lookup_stmt_by_id, [timeframe_id] ).one()
     timeframe_dict = {"id": timeframe_row.id, "job": timeframe_row.job, "monday": timeframe_row.monday, "tuesday": timeframe_row.tuesday
                       , "wednesday": timeframe_row.wednesday, "thursday": timeframe_row.thursday, "friday": timeframe_row.friday,
@@ -293,12 +277,10 @@ def findJobTimeframeById(job_dict):
 def deleteTimeFrameDays(timeframe_day_ids):
     for timeframe_day_id in timeframe_day_ids:
         print(f"Deleting timeframe day => id={timeframe_day_id}")
-        # session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
         session.execute(timeframeday_delete_by_id,[timeframe_day_id])
 
 
 def deleteTimeFrameById(timeframe_id):
-    # session.execute(f"DELETE FROM mep_timeframe WHERE id = {timeframe_id}")
     session.execute(timeframe_delete_by_id, [timeframe_id] )
 
 def deleteJobTimeFrame(job_dict):
