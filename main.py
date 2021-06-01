@@ -19,25 +19,83 @@ profile = ExecutionProfile(
     row_factory=tuple_factory
 )
 
+session = None
+primecast_account_lookup_stmt_by_name = None
+job_lookup_stmt_by_enddate_and_account = None
+job_lookup_stmt_by_id = None
+template_lookup_stmt_by_job = None
+notification_lookup_stmt_by_job = None
+notification_delete_by_id = None
+parameterisedlistmsisdn_lookup_by_parameterisedlist_id = None
+parameterisedlistmsisdn_delete_by_parameterisedlist= None
+parameterisedlist_delete_by_id= None
+parameterisedlistjob_delete_by_parameterisedlist= None
+flightstatushistory_lookup_by_job_id= None
+flightstatushistory_lookup_by_id= None
+job_delete_by_id= None
+timeframe_lookup_stmt_by_id= None
+timeframeday_delete_by_id= None
+timeframe_delete_by_id= None
 
+def initializePreparedStatements():
+    global primecast_account_lookup_stmt_by_name
+    global job_lookup_stmt_by_enddate_and_account
+    global job_lookup_stmt_by_id
+    global template_lookup_stmt_by_job
+    global template_delete_by_id
+    global notification_lookup_stmt_by_job
+    global notification_delete_by_id
+    global parameterisedlistmsisdn_lookup_by_parameterisedlist_id
+    global parameterisedlistitem_delete_by_id
+    global parameterisedlistmsisdn_delete_by_parameterisedlist
+    global parameterisedlist_delete_by_id
+    global parameterisedlistjob_delete_by_parameterisedlist
+    global flightstatushistory_lookup_by_job_id
+    global flightstatushistory_lookup_by_id
+    global job_delete_by_id
+    global timeframe_lookup_stmt_by_id
+    global timeframeday_delete_by_id
+    global timeframe_delete_by_id
+
+    primecast_account_lookup_stmt_by_name = session.prepare("SELECT id FROM mep_primecastaccount where name = ? ALLOW FILTERING")
+    job_lookup_stmt_by_enddate_and_account = session.prepare("SELECT id,name FROM mep_job WHERE enddate < ? AND  account = ? \
+         ALLOW FILTERING")
+    job_lookup_stmt_by_id = session.prepare("SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = ?")
+    template_lookup_stmt_by_job = session.prepare("SELECT id FROM mep_template WHERE job = ? ALLOW FILTERING")
+    template_delete_by_id = session.prepare("DELETE FROM mep_template WHERE id = ?")
+    notification_lookup_stmt_by_job =  session.prepare("SELECT id FROM mep_notification WHERE flight = ? ALLOW FILTERING")
+    notification_delete_by_id = session.prepare("DELETE FROM mep_notification WHERE id = ?")
+    parameterisedlistmsisdn_lookup_by_parameterisedlist_id = session.prepare("SELECT parameterisedlistitem FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = ?")
+    parameterisedlistitem_delete_by_id = session.prepare("DELETE FROM mep_parameterisedlistitem WHERE id = ?")
+    parameterisedlistmsisdn_delete_by_parameterisedlist = session.prepare("DELETE FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = ?")
+    parameterisedlist_delete_by_id =  session.prepare("DELETE FROM mep_parameterisedlist WHERE id = ?")
+    parameterisedlistjob_delete_by_parameterisedlist = session.prepare("DELETE FROM mep_parameterisedlist_job WHERE parameterisedlist= ?")
+    flightstatushistory_lookup_by_job_id = session.prepare("SELECT id FROM flightstatushistory WHERE flight = ? ALLOW FILTERING")
+    flightstatushistory_lookup_by_id = session.prepare("DELETE FROM flightstatushistory WHERE id = ?")
+    job_delete_by_id =  session.prepare("DELETE FROM mep_job WHERE id = ?")
+    timeframe_lookup_stmt_by_id = session.prepare("SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = ?")
+    timeframeday_delete_by_id = session.prepare("DELETE FROM mep_timeframeday WHERE id = ?")
+    timeframe_delete_by_id = session.prepare("DELETE FROM mep_timeframe WHERE id = ?")
 
 def initializeCassandraSession():
-    cassandra_ip_address = input("Enter Cassandra Cluster IP Address \n(example 192.168.123.219):\n")
+    global session
+    cassandra_ip_address = input("Enter Cassandra Cluster IP Address (example 192.168.123.219):\n")
     ip_list = [cassandra_ip_address]
-    cassandra_keyspace = input("Enter Cassandra Keyspace \n(example Openmind , Openmind_BE etc):\n")
+    cassandra_keyspace = input("Enter Cassandra Keyspace (example Openmind , Openmind_BE etc):\n")
     cluster = Cluster(ip_list)
-    print(f"Connecting to cassandra : {ip_list} keyspace: {cassandra_keyspace}.\n")
+    print(f"Connecting to cassandra : {ip_list} keyspace: {cassandra_keyspace}.")
     session = cluster.connect(cassandra_keyspace)
-    print("Successfully connected to Cassandra.\n")
+    print("Successfully connected to Cassandra.")
+    initializePreparedStatements()
     return session
 
 
-def loadPrimeCastAccount(session):
+def loadPrimeCastAccount():
     primecast_account_name_id_map = {}
-    primecast_account_name = input("Enter PrimecastAccount Name \n(example TestAccount):\n")
+    primecast_account_name = input("Enter PrimecastAccount Name .(example TestAccount):\n")
     primecast_account_ids = []
-    primecast_account_rows = session.execute(
-        f"SELECT id FROM mep_primecastaccount where name ='{primecast_account_name}' ALLOW FILTERING")
+
+    primecast_account_rows = session.execute(primecast_account_lookup_stmt_by_name, [primecast_account_name])
 
     for primecast_account_row in primecast_account_rows:
         primecast_account_ids.append(primecast_account_row.id)
@@ -68,10 +126,12 @@ def userInputDate():
     return date_before_to_cleanup
 
 
-def findJobsForCleanUp(session, primecast_account_id, date_before_to_cleanup):
-    job_rows = session.execute(
-        f"SELECT id,name FROM mep_job WHERE enddate < '{date_before_to_cleanup}' AND  account = {primecast_account_id} \
-         ALLOW FILTERING")
+def findJobsForCleanUp(primecast_account_id, date_before_to_cleanup):
+    #job_rows = session.execute(
+    #    f"SELECT id,name FROM mep_job WHERE enddate < '{date_before_to_cleanup}' AND  account = {primecast_account_id} \
+    #     ALLOW FILTERING")
+
+    job_rows = session.execute(job_lookup_stmt_by_enddate_and_account, [datetime.strptime(date_before_to_cleanup, '%Y-%m-%d %H:%M:%S'), primecast_account_id])
     job_ids_to_delete = []
     for job_row in job_rows:
         print(f"Candidate for Deletion: Job name => {job_row.name}")
@@ -103,37 +163,43 @@ def confirm_deletion_of_jobs():
         return confirm_deletion_of_jobs()
 
 
-def deleteTemplates(session, template_ids):
+def deleteTemplates(template_ids):
     for template_id in template_ids:
-        session.execute(f"DELETE FROM mep_template WHERE id = {template_id}")
+        # session.execute(f"DELETE FROM mep_template WHERE id = {template_id}")
+        session.execute(template_delete_by_id, [template_id])
 
 
-def deleteJobTemplates(session, job_dict):
+def deleteJobTemplates(job_dict):
     print(f"Searching Templates for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     template_ids = []
-    template_rows = session.execute(f"SELECT id FROM mep_template WHERE job = {job_id} ALLOW FILTERING")
+    # template_rows = session.execute(f"SELECT id FROM mep_template WHERE job = {job_id} ALLOW FILTERING")
+    template_rows = session.execute(template_lookup_stmt_by_job, [job_id])
+
     for template_row in template_rows:
         template_ids.append(template_row.id)
     if len(template_ids) > 0:
         print(f"Found {len(template_ids)} Template(s) to delete.")
-        deleteTemplates(session, template_ids)
+        deleteTemplates(template_ids)
         print(f"Successfully deleted the Template(s).")
         # time.sleep(1)
     else:
         print(f"Found {len(template_ids)} Template(s) to delete.")
 
 
-def deleteNotifications(session, job_notification_ids):
+def deleteNotifications(job_notification_ids):
     for job_notification_id in job_notification_ids:
-        session.execute(f"DELETE FROM mep_notification WHERE id = {job_notification_id}")
+        # session.execute(f"DELETE FROM mep_notification WHERE id = {job_notification_id}")
+        session.execute(notification_delete_by_id, [job_notification_id])
 
 
-def deleteJobNotifications(session, job_dict):
+def deleteJobNotifications(job_dict):
     print(f"Searching notifications for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     job_notification_ids = []
-    notification_rows = session.execute(f"SELECT id FROM mep_notification WHERE flight = {job_id} ALLOW FILTERING")
+    # notification_rows = session.execute(f"SELECT id FROM mep_notification WHERE flight = {job_id} ALLOW FILTERING")
+    notification_rows = session.execute(notification_lookup_stmt_by_job,[job_id])
+
     for notification_row in notification_rows:
         job_notification_ids.append(notification_row.id)
 
@@ -146,34 +212,39 @@ def deleteJobNotifications(session, job_dict):
         print(f"Found {len(job_notification_ids)} Notifications to delete.")
 
 
-def findJobById(session, job_id):
-    row = session.execute(f"SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = {job_id}").one()
+def findJobById(job_id):
+   # row = session.execute(f"SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = {job_id}").one()
+    row = session.execute(job_lookup_stmt_by_id,[job_id]).one()
+
     job_dict = {"id": row.id, "name": row.name, "parameterisedcontactlist": row.parameterisedcontactlist,
                 "location": row.location, "profile": row.profile, "timeframe": row.timeframe}
     return job_dict
 
 
-def deleteParameterisedListJob(session, parameterised_list_id):
-    session.execute(f"DELETE FROM mep_parameterisedlist_job WHERE parameterisedlist= {parameterised_list_id}")
+def deleteParameterisedListJob(parameterised_list_id):
+    # session.execute(f"DELETE FROM mep_parameterisedlist_job WHERE parameterisedlist= {parameterised_list_id}")
+    session.execute(parameterisedlistjob_delete_by_parameterisedlist, [parameterised_list_id])
 
 
-def deleteParameterisedList(session, parameterised_list_id):
-    session.execute(f"DELETE FROM mep_parameterisedlist WHERE id = {parameterised_list_id}")
+def deleteParameterisedList(parameterised_list_id):
+    # session.execute(f"DELETE FROM mep_parameterisedlist WHERE id = {parameterised_list_id}")
+    session.execute(parameterisedlist_delete_by_id,[parameterised_list_id])
 
-
-def deleteParameterisedIntermediate(session, parameterised_list_id):
+def deleteParameterisedIntermediate(parameterised_list_id):
     paramaterised_list_item_ids = []
-    parameterisedlist_msisdn_rows = session.execute(f"SELECT parameterisedlistitem FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
+    # parameterisedlist_msisdn_rows = session.execute(f"SELECT parameterisedlistitem FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
+    parameterisedlist_msisdn_rows = session.execute(parameterisedlistmsisdn_lookup_by_parameterisedlist_id, [parameterised_list_id])
     for parameterisedlist_msisdn_row in parameterisedlist_msisdn_rows:
         paramaterised_list_item_ids.append(parameterisedlist_msisdn_row.parameterisedlistitem)
 
     if len(paramaterised_list_item_ids) > 0:
         for paramaterised_list_item_id in paramaterised_list_item_ids:
-            session.execute(f"DELETE FROM mep_parameterisedlistitem WHERE id = {paramaterised_list_item_id}")
-        session.execute(f"DELETE FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
+            # session.execute(f"DELETE FROM mep_parameterisedlistitem WHERE id = {paramaterised_list_item_id}")
+            session.execute(parameterisedlistitem_delete_by_id,[paramaterised_list_item_id])
+        # session.execute(f"DELETE FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
+        session.execute(parameterisedlistmsisdn_delete_by_parameterisedlist, [parameterised_list_id] )
 
-
-def deleteJobParameterisedList(session, job_dict):
+def deleteJobParameterisedList(job_dict):
     parameterised_list_id = job_dict["parameterisedcontactlist"]
     if bool(parameterised_list_id):
         print(f"Deleting parameterised list for job: {job_dict['name']}")
@@ -184,53 +255,53 @@ def deleteJobParameterisedList(session, job_dict):
         print(f"Found no parameterised list for job: {job_dict['name']}")
 
 
-def deleteFlightStatusHistory(session, job_dict):
+def deleteFlightStatusHistory(job_dict):
     print(f"Searching flight status histories for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     flightstatushistory_ids = []
-    flightstatushistory_rows = session.execute(f"SELECT id FROM flightstatushistory WHERE flight = {job_id} ALLOW FILTERING")
+    # flightstatushistory_rows = session.execute(f"SELECT id FROM flightstatushistory WHERE flight = {job_id} ALLOW FILTERING")
+    flightstatushistory_rows = session.execute(flightstatushistory_lookup_by_job_id,[job_id])
+
     for flightstatushistory_row in flightstatushistory_rows:
         flightstatushistory_ids.append(flightstatushistory_row.id)
 
     if len(flightstatushistory_ids) > 0:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
         for flightstatushistory_id in flightstatushistory_ids:
-            session.execute(f"DELETE FROM flightstatushistory WHERE id = {flightstatushistory_id}")
+            #session.execute(f"DELETE FROM flightstatushistory WHERE id = {flightstatushistory_id}")
+            session.execute(flightstatushistory_lookup_by_id, [flightstatushistory_id])
     else:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
 
 
-def deleteJob(session, job_dict):
+def deleteJob(job_dict):
     job_id = job_dict["id"]
     print(f"Deleting job name={job_dict['name']} id={job_dict['id']}")
-    session.execute(f"DELETE FROM mep_job WHERE id = {job_id}")
+    # session.execute(f"DELETE FROM mep_job WHERE id = {job_id}")
+    session.execute(job_delete_by_id, [job_id])
 
-def findJobTimeframeById(session, job_dict):
+def findJobTimeframeById(job_dict):
     timeframe_id = job_dict["timeframe"]
-    timeframe_row = session.execute(f"SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = {timeframe_id}").one()
+    # timeframe_row = session.execute(f"SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = {timeframe_id}").one()
+    timeframe_row = session.execute(timeframe_lookup_stmt_by_id, [timeframe_id] ).one()
     timeframe_dict = {"id": timeframe_row.id, "job": timeframe_row.job, "monday": timeframe_row.monday, "tuesday": timeframe_row.tuesday
                       , "wednesday": timeframe_row.wednesday, "thursday": timeframe_row.thursday, "friday": timeframe_row.friday,
                       "saturday": timeframe_row.saturday, "sunday": timeframe_row.sunday}
     return timeframe_dict
 
 
-def deleteTimeFrameDays(session, timeframe_day_ids):
+def deleteTimeFrameDays(timeframe_day_ids):
     for timeframe_day_id in timeframe_day_ids:
         print(f"Deleting timeframe day => id={timeframe_day_id}")
-        session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
+        # session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
+        session.execute(timeframeday_delete_by_id,[timeframe_day_id])
 
 
-def deleteTimeFrame(session, timeframe_day_ids):
-    for timeframe_day_id in timeframe_day_ids:
-        print(f"Deleting timeframe day => id={timeframe_day_id}")
-        session.execute(f"DELETE FROM mep_timeframeday WHERE id = {timeframe_day_id}")
+def deleteTimeFrameById(timeframe_id):
+    # session.execute(f"DELETE FROM mep_timeframe WHERE id = {timeframe_id}")
+    session.execute(timeframe_delete_by_id, [timeframe_id] )
 
-
-def deleteTimeFrameById(session, timeframe_id):
-    session.execute(f"DELETE FROM mep_timeframe WHERE id = {timeframe_id}")
-
-
-def deleteJobTimeFrame(session, job_dict):
+def deleteJobTimeFrame(job_dict):
     timeframe_id = job_dict["timeframe"]
     if timeframe_id is None:
         print(f"Found no time frame for job: {job_dict['name']}")
@@ -242,32 +313,33 @@ def deleteJobTimeFrame(session, job_dict):
         deleteTimeFrameById(session, timeframe_id)
 
 
-def scheduleJobsForDelete(session, job_ids_to_delete):
+def scheduleJobsForDelete(job_ids_to_delete):
     confirmation = confirm_deletion_of_jobs()
     if confirmation:
         for job_id in job_ids_to_delete:
-            job_dict = findJobById(session, job_id)
+            job_dict = findJobById(job_id)
             print(f"Executing cleanup for job: {job_dict}.")
             print("--------------------------------------")
-            deleteJobTemplates(session, job_dict)
-            deleteJobNotifications(session, job_dict)
-            deleteJobParameterisedList(session, job_dict)
-            deleteFlightStatusHistory(session, job_dict)
-            deleteJobTimeFrame(session, job_dict)
-            deleteJob(session, job_dict)
+            deleteJobTemplates(job_dict)
+            deleteJobNotifications(job_dict)
+            deleteJobParameterisedList(job_dict)
+            deleteFlightStatusHistory(job_dict)
+            deleteJobTimeFrame(job_dict)
+            deleteJob(job_dict)
             time.sleep(2)
             print("--------------------------------------")
 
 
 def cleanUpJobs():
+    global session
     session = initializeCassandraSession()
-    primecast_account_name_id_map = loadPrimeCastAccount(session)
+    primecast_account_name_id_map = loadPrimeCastAccount()
     date_before_to_cleanup = userInputDate()
     primecast_account_id = getIdFromPrimecastAccountNameIdMap(primecast_account_name_id_map)
-    job_ids_to_delete = findJobsForCleanUp(session, primecast_account_id, date_before_to_cleanup)
+    job_ids_to_delete = findJobsForCleanUp(primecast_account_id, date_before_to_cleanup)
 
     if len(job_ids_to_delete) > 0:
-        scheduleJobsForDelete(session, job_ids_to_delete)
+        scheduleJobsForDelete(job_ids_to_delete)
     else:
         print("Found no jobs to delete")
 
