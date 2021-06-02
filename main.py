@@ -1,10 +1,11 @@
 import sys
 import time
+from uuid import UUID
+from xml.dom import minidom
 
 
 from datetime import datetime
 from cassandra.cluster import Cluster
-from cassandra.cluster import Session
 
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import WhiteListRoundRobinPolicy, DowngradingConsistencyRetryPolicy, ConsistencyLevel
@@ -20,12 +21,16 @@ profile = ExecutionProfile(
 
 session = None
 primecast_account_lookup_stmt_by_name = None
-job_lookup_stmt_by_enddate_and_account = None
-job_lookup_stmt_by_id = None
-template_lookup_stmt_by_job = None
-notification_lookup_stmt_by_job = None
-notification_delete_by_id = None
-parameterisedlistmsisdn_lookup_by_parameterisedlist_id = None
+job_lookup_stmt_by_enddate_and_account= None
+job_lookup_stmt_by_id= None
+template_lookup_stmt_by_job= None
+template_smildefinition_lookup_stmt_by_id= None
+file_delete_by_id= None
+template_delete_by_id= None
+notification_lookup_stmt_by_job= None
+notification_delete_by_id= None
+parameterisedlistmsisdn_lookup_by_parameterisedlist_id= None
+parameterisedlistitem_delete_by_id= None
 parameterisedlistmsisdn_delete_by_parameterisedlist= None
 parameterisedlist_delete_by_id= None
 parameterisedlistjob_delete_by_parameterisedlist= None
@@ -35,12 +40,16 @@ job_delete_by_id= None
 timeframe_lookup_stmt_by_id= None
 timeframeday_delete_by_id= None
 timeframe_delete_by_id= None
+note_lookup_stmt_by_job= None
+note_delete_by_id= None
 
 def initializePreparedStatements():
     global primecast_account_lookup_stmt_by_name
     global job_lookup_stmt_by_enddate_and_account
     global job_lookup_stmt_by_id
     global template_lookup_stmt_by_job
+    global template_smildefinition_lookup_stmt_by_id
+    global file_delete_by_id
     global template_delete_by_id
     global notification_lookup_stmt_by_job
     global notification_delete_by_id
@@ -55,12 +64,16 @@ def initializePreparedStatements():
     global timeframe_lookup_stmt_by_id
     global timeframeday_delete_by_id
     global timeframe_delete_by_id
+    global note_lookup_stmt_by_job
+    global note_delete_by_id
 
     primecast_account_lookup_stmt_by_name = session.prepare("SELECT id FROM mep_primecastaccount where name = ? ALLOW FILTERING")
     job_lookup_stmt_by_enddate_and_account = session.prepare("SELECT id,name FROM mep_job WHERE enddate < ? AND  account = ? \
          ALLOW FILTERING")
     job_lookup_stmt_by_id = session.prepare("SELECT id, name, parameterisedcontactlist, location, profile, timeframe FROM mep_job WHERE id = ?")
     template_lookup_stmt_by_job = session.prepare("SELECT id FROM mep_template WHERE job = ? ALLOW FILTERING")
+    template_smildefinition_lookup_stmt_by_id = session.prepare("SELECT smildefinition FROM mep_template WHERE id = ?")
+    file_delete_by_id = session.prepare("DELETE FROM mep_file WHERE id =?")
     template_delete_by_id = session.prepare("DELETE FROM mep_template WHERE id = ?")
     notification_lookup_stmt_by_job =  session.prepare("SELECT id FROM mep_notification WHERE flight = ? ALLOW FILTERING")
     notification_delete_by_id = session.prepare("DELETE FROM mep_notification WHERE id = ?")
@@ -75,6 +88,9 @@ def initializePreparedStatements():
     timeframe_lookup_stmt_by_id = session.prepare("SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = ?")
     timeframeday_delete_by_id = session.prepare("DELETE FROM mep_timeframeday WHERE id = ?")
     timeframe_delete_by_id = session.prepare("DELETE FROM mep_timeframe WHERE id = ?")
+    note_lookup_stmt_by_job = session.prepare("SELECT id FROM  mep_note WHERE flight  = ? ALLOW FILTERING")
+    note_delete_by_id = session.prepare("DELETE FROM mep_note WHERE id = ?")
+
 
 def initializeCassandraSession():
     global session
@@ -120,7 +136,7 @@ def validateDate(date_text):
 
 
 def userInputDate():
-    date_before_to_cleanup = input("Enter a date before all jobs should be deleted (example '2020-12-31 23:59:59')\n")
+    date_before_to_cleanup = input("Enter a date before all jobs should be deleted(the format should be YYYY-MM-DD HH:MM:SS example '2020-12-31 23:59:59')\n")
     validateDate(date_before_to_cleanup)
     return date_before_to_cleanup
 
@@ -158,7 +174,34 @@ def confirm_deletion_of_jobs():
         return confirm_deletion_of_jobs()
 
 
+def deleteMediaFiles(file_ids):
+    for file_id in file_ids:
+        session.execute(file_delete_by_id, [file_id])
+
+
+def deleteTemplateMediaFiles(template_id):
+    row = session.execute(template_smildefinition_lookup_stmt_by_id, [template_id]).one()
+    smildefinition_xml = row.smildefinition
+    file_ids = []
+
+    if smildefinition_xml:
+        xml_doc = minidom.parseString(smildefinition_xml)
+        for element in xml_doc.getElementsByTagName('img'):
+            file_ids.append(UUID(element.attributes['src'].value))
+        for element in xml_doc.getElementsByTagName('video'):
+            file_ids.append(UUID( element.attributes['src'].value))
+        for element in xml_doc.getElementsByTagName('audio'):
+            file_ids.append(UUID(element.attributes['src'].value))
+
+    if len(file_ids) > 0:
+        print(f"Found {len(file_ids)} file(s) referenced in smildefinitions to delete.")
+        deleteMediaFiles(file_ids)
+
+
 def deleteTemplates(template_ids):
+    for template_id in template_ids:
+        deleteTemplateMediaFiles(template_id)
+
     for template_id in template_ids:
         session.execute(template_delete_by_id, [template_id])
 
@@ -196,7 +239,7 @@ def deleteJobNotifications(job_dict):
 
     if len(job_notification_ids) > 0:
         print(f"Found {len(job_notification_ids)} Notifications(s) to delete.")
-        deleteNotifications(session, job_notification_ids)
+        deleteNotifications( job_notification_ids)
         print(f"Successfully deleted the Notifications.")
         # time.sleep(1)
     else:
@@ -218,6 +261,7 @@ def deleteParameterisedListJob(parameterised_list_id):
 def deleteParameterisedList(parameterised_list_id):
     session.execute(parameterisedlist_delete_by_id,[parameterised_list_id])
 
+
 def deleteParameterisedIntermediate(parameterised_list_id):
     paramaterised_list_item_ids = []
     parameterisedlist_msisdn_rows = session.execute(parameterisedlistmsisdn_lookup_by_parameterisedlist_id, [parameterised_list_id])
@@ -226,18 +270,20 @@ def deleteParameterisedIntermediate(parameterised_list_id):
 
     if len(paramaterised_list_item_ids) > 0:
         for paramaterised_list_item_id in paramaterised_list_item_ids:
-            # session.execute(f"DELETE FROM mep_parameterisedlistitem WHERE id = {paramaterised_list_item_id}")
             session.execute(parameterisedlistitem_delete_by_id,[paramaterised_list_item_id])
-        # session.execute(f"DELETE FROM mep_parameterisedlist_msisdn WHERE parameterisedlist = {parameterised_list_id}")
         session.execute(parameterisedlistmsisdn_delete_by_parameterisedlist, [parameterised_list_id] )
+
 
 def deleteJobParameterisedList(job_dict):
     parameterised_list_id = job_dict["parameterisedcontactlist"]
     if bool(parameterised_list_id):
         print(f"Deleting parameterised list for job: {job_dict['name']}")
+        print(f"Deleting parameterised in progress please wait.")
         deleteParameterisedIntermediate( parameterised_list_id)
         deleteParameterisedList( parameterised_list_id)
         deleteParameterisedListJob( parameterised_list_id)
+        print(f"Successfully deleted parameterised.")
+
     else:
         print(f"Found no parameterised list for job: {job_dict['name']}")
 
@@ -246,7 +292,7 @@ def deleteFlightStatusHistory(job_dict):
     print(f"Searching flight status histories for job: {job_dict['name']}.")
     job_id = job_dict["id"]
     flightstatushistory_ids = []
-    flightstatushistory_rows = session.execute(flightstatushistory_lookup_by_job_id,[job_id])
+    flightstatushistory_rows = session.execute(flightstatushistory_lookup_by_job_id, [job_id])
 
     for flightstatushistory_row in flightstatushistory_rows:
         flightstatushistory_ids.append(flightstatushistory_row.id)
@@ -283,16 +329,33 @@ def deleteTimeFrameDays(timeframe_day_ids):
 def deleteTimeFrameById(timeframe_id):
     session.execute(timeframe_delete_by_id, [timeframe_id] )
 
+
 def deleteJobTimeFrame(job_dict):
     timeframe_id = job_dict["timeframe"]
     if timeframe_id is None:
         print(f"Found no time frame for job: {job_dict['name']}")
     else:
-        timeframe_dict = findJobTimeframeById(session, job_dict)
+        timeframe_dict = findJobTimeframeById(job_dict)
         timeframe_day_ids = [timeframe_dict["monday"], timeframe_dict["tuesday"], timeframe_dict["wednesday"],
                              timeframe_dict["thursday"], timeframe_dict["saturday"], timeframe_dict["sunday"]]
-        deleteTimeFrameDays(session, timeframe_day_ids)
-        deleteTimeFrameById(session, timeframe_id)
+        deleteTimeFrameDays(timeframe_day_ids)
+        deleteTimeFrameById(timeframe_id)
+
+
+def deleteJobNotes(job_dict):
+    print(f"Searching notes for job: {job_dict['name']}.")
+    job_id = job_dict["id"]
+    note_ids = []
+    note_rows = session.execute(note_lookup_stmt_by_job, [job_id])
+    for note_row in note_rows:
+        note_ids.append(note_row.id)
+
+    if len(note_ids) > 0:
+        print(f"Found {len(note_ids)} notes to delete.")
+        for note_id in note_ids:
+            session.execute(note_delete_by_id, [note_id])
+    else:
+        print(f"Found {len(note_ids)} notes to delete.")
 
 
 def scheduleJobsForDelete(job_ids_to_delete):
@@ -307,6 +370,7 @@ def scheduleJobsForDelete(job_ids_to_delete):
             deleteJobParameterisedList(job_dict)
             deleteFlightStatusHistory(job_dict)
             deleteJobTimeFrame(job_dict)
+            deleteJobNotes(job_dict)
             deleteJob(job_dict)
             time.sleep(2)
             print("--------------------------------------")
