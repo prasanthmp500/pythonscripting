@@ -372,7 +372,7 @@ def scheduleJobsForDelete(job_ids_to_delete):
             deleteJobTimeFrame(job_dict)
             deleteJobNotes(job_dict)
             deleteJob(job_dict)
-            time.sleep(2)
+            time.sleep(1)
             print("--------------------------------------")
 
 
