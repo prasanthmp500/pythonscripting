@@ -22,27 +22,27 @@ profile = ExecutionProfile(
 
 session = None
 primecast_account_lookup_stmt_by_name = None
-job_lookup_stmt_by_enddate_and_account= None
-job_lookup_stmt_by_id= None
-template_lookup_stmt_by_job= None
-template_smildefinition_lookup_stmt_by_id= None
-file_delete_by_id= None
-template_delete_by_id= None
-notification_lookup_stmt_by_job= None
-notification_delete_by_id= None
-parameterisedlistmsisdn_lookup_by_parameterisedlist_id= None
+job_lookup_stmt_by_enddate_and_account = None
+job_lookup_stmt_by_id = None
+template_lookup_stmt_by_job = None
+template_smildefinition_lookup_stmt_by_id = None
+file_delete_by_id = None
+template_delete_by_id = None
+notification_lookup_stmt_by_job = None
+notification_delete_by_id = None
+parameterisedlistmsisdn_lookup_by_parameterisedlist_id = None
 parameterisedlistitem_delete_by_id= None
-parameterisedlistmsisdn_delete_by_parameterisedlist= None
-parameterisedlist_delete_by_id= None
-parameterisedlistjob_delete_by_parameterisedlist= None
-flightstatushistory_lookup_by_job_id= None
-flightstatushistory_lookup_by_id= None
-job_delete_by_id= None
-timeframe_lookup_stmt_by_id= None
-timeframeday_delete_by_id= None
-timeframe_delete_by_id= None
-note_lookup_stmt_by_job= None
-note_delete_by_id= None
+parameterisedlistmsisdn_delete_by_parameterisedlist = None
+parameterisedlist_delete_by_id = None
+parameterisedlistjob_delete_by_parameterisedlist = None
+flightstatushistory_lookup_by_job_id = None
+flightstatushistory_delete_by_id = None
+job_delete_by_id = None
+timeframe_lookup_stmt_by_id = None
+timeframeday_delete_by_id = None
+timeframe_delete_by_id = None
+note_lookup_stmt_by_job = None
+note_delete_by_id = None
 
 def initializePreparedStatements():
     global primecast_account_lookup_stmt_by_name
@@ -60,7 +60,7 @@ def initializePreparedStatements():
     global parameterisedlist_delete_by_id
     global parameterisedlistjob_delete_by_parameterisedlist
     global flightstatushistory_lookup_by_job_id
-    global flightstatushistory_lookup_by_id
+    global flightstatushistory_delete_by_id
     global job_delete_by_id
     global timeframe_lookup_stmt_by_id
     global timeframeday_delete_by_id
@@ -84,7 +84,7 @@ def initializePreparedStatements():
     parameterisedlist_delete_by_id =  session.prepare("DELETE FROM mep_parameterisedlist WHERE id = ?")
     parameterisedlistjob_delete_by_parameterisedlist = session.prepare("DELETE FROM mep_parameterisedlist_job WHERE parameterisedlist= ?")
     flightstatushistory_lookup_by_job_id = session.prepare("SELECT id FROM flightstatushistory WHERE flight = ? ALLOW FILTERING")
-    flightstatushistory_lookup_by_id = session.prepare("DELETE FROM flightstatushistory WHERE id = ?")
+    flightstatushistory_delete_by_id = session.prepare("DELETE FROM flightstatushistory WHERE id = ?")
     job_delete_by_id =  session.prepare("DELETE FROM mep_job WHERE id = ?")
     timeframe_lookup_stmt_by_id = session.prepare("SELECT id, job, monday, tuesday, wednesday, thursday, friday, saturday, sunday FROM mep_timeframe WHERE id = ?")
     timeframeday_delete_by_id = session.prepare("DELETE FROM mep_timeframeday WHERE id = ?")
@@ -301,7 +301,7 @@ def deleteFlightStatusHistory(job_dict):
     if len(flightstatushistory_ids) > 0:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
         for flightstatushistory_id in flightstatushistory_ids:
-            session.execute(flightstatushistory_lookup_by_id, [flightstatushistory_id])
+            session.execute(flightstatushistory_delete_by_id, [flightstatushistory_id])
     else:
         print(f"Found {len(flightstatushistory_ids)} flight status histories to delete.")
 
