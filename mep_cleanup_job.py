@@ -359,6 +359,13 @@ def deleteJobNotes(job_dict):
         print(f"Found {len(note_ids)} notes to delete.")
 
 
+def deleteKyloJobsDone(job_dict):
+    print(f"Deleting job from mep_kylo_jobs_done : name = {job_dict['name']} id = {job_dict['id']}.")
+    job_id = job_dict["id"]
+    result = subprocess.Popen(["kylo_cli", "-table", "mep_kylo_jobs_done", "-ki_del", "-key", str(job_id)])
+    result.wait()
+
+
 def scheduleJobsForDelete(job_ids_to_delete):
     confirmation = confirm_deletion_of_jobs()
     if confirmation:
@@ -372,6 +379,7 @@ def scheduleJobsForDelete(job_ids_to_delete):
             deleteFlightStatusHistory(job_dict)
             deleteJobTimeFrame(job_dict)
             deleteJobNotes(job_dict)
+            deleteKyloJobsDone(job_dict)
             deleteJob(job_dict)
             time.sleep(1)
             print("--------------------------------------")

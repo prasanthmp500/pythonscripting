@@ -243,10 +243,18 @@ def deleteCampaignFiles(campaign_dict):
     else:
         print(f"Found {len(file_ids)} file(s) to delete.")
 
+
 def deleteCampaign(campaign_dict):
     campaign_id = campaign_dict["id"]
     print(f"Deleting campaign name={campaign_dict['name']} id={campaign_dict['id']}")
     session.execute(campaign_delete_by_id, [campaign_id])
+
+
+def deleteCampaignKylo(campaign_dict):
+    campaign_id = campaign_dict["id"]
+    print(f"Deleting campaign from mep_kylo_campaigns_done name={campaign_dict['name']} id={campaign_dict['id']}")
+    result = subprocess.Popen(["kylo_cli","-table", "mep_kylo_campaigns_done", "-ki_del", "-key", str(campaign_id)])
+    result.wait()
 
 
 def scheduleCampaignsForDelete(campaign_ids_to_delete):
@@ -260,6 +268,7 @@ def scheduleCampaignsForDelete(campaign_ids_to_delete):
             deleteCampaignNotifications(campaign_dict)
             deleteCampaignStatusHistory(campaign_dict)
             deleteCampaignFiles(campaign_dict)
+            deleteCampaignKylo(campaign_dict)
             deleteCampaign(campaign_dict)
             time.sleep(1)
             print("--------------------------------------")
